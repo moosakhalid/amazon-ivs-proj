@@ -1,0 +1,288 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "A push button deployment of a simple managed streaming application",
+    "Resources": {
+        "IVSChannel": {
+            "Type": "AWS::IVS::Channel",
+            "Properties": {
+                "LatencyMode": "LOW",
+                "Name": "MyIVSChannel-CloudFormation",
+                "Type": "STANDARD",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "IVS-CloudFormation"
+                    }
+                ]
+            }
+        },
+        "IVSStreamKey": {
+            "Type": "AWS::IVS::StreamKey",
+            "Properties": {
+                "ChannelArn": {"Ref":"IVSChannel"},
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "cfn-ivs-sk"
+                    }
+                ]
+            }
+        },
+        "LambdaIVSRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "IVSRoleCFN",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": "sts:AssumeRole",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            }
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "IVSPolicyForLambda",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "ivs:PutMetadata"
+                                    ],
+                                    "Resource": "arn:aws:ivs:*:*:channel/*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": "arn:aws:logs:*:*:*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "CustomIVSLambda": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "FunctionName": "IVSLambda",
+                "Description": "IVS PutMetadata Lambda Function",
+                "Runtime": "python3.8",
+                "MemorySize": 128,
+                "Handler": "index.handler",
+                "Role": {"Fn::GetAtt": ["LambdaIVSRole","Arn"]},
+                "Code": {
+                    "ZipFile": {
+                        "Fn::Join": [
+                            "\n", [
+                                "import boto3",
+                                "import botocore as boto",
+                                "client = boto3.client('ivs')",
+                                "metadata_string =  '{\"question\": \"This stream will be stopped shortly\", \"poll_id\": 0, \"answers\": [\"OK\", \"NOO\", \"Fine!!!\"]}'",
+                                "def handler(event, context):",
+                                "    if event['detail']['channel_name'] == 'MyIVSChannel-CloudFormation':",
+                                "        channel_list = event['resources']",
+                                "        time.sleep(15)",
+                                "        client.put_metadata(channelArn=channel_list[0], metadata=metadata_string)"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "IVSEventBridgeRule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+                "Name": "IVS_State_Change",
+                "EventPattern": {
+                    "source": [
+                        "aws.ivs"
+                    ],
+                    "detail-type": [
+                        "IVS Stream State Change"
+                    ]
+                },
+                "State": "ENABLED",
+                "Targets": [
+                    {
+                        "Arn": {"Fn::GetAtt": ["CustomIVSLambda","Arn"]},
+                        "Id": "1234"
+                    }
+                ]
+            }
+        },
+        "S3IVSWebsite": {
+            "Type": "AWS::S3::Bucket",
+            "DeletionPolicy": "Delete",
+            "Properties": {
+                "WebsiteConfiguration": {
+                    "IndexDocument": "index.html"
+                }
+            }
+        },
+        "S3IVSBucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+                "Bucket": {"Ref":"S3IVSWebsite"},
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:GetObject"
+                            ],
+                            "Resource": {"Fn::Join": [
+                                "",[
+                                    {"Fn::GetAtt": ["S3IVSWebsite","Arn"]},
+                                    "/*"
+                                ]
+                            ]
+                        },
+                        "Principal": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "UploaderLambdaRoleS3": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "UploaderLambdaRoleS3",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": "sts:AssumeRole",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            }
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "UploadToWebsiteFromLambda",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "s3:PutObject",
+                                        "s3:Get*",
+                                        "s3:DeleteObject"
+                                    ],
+                                    "Resource": {"Fn::Join": [
+                                        "",
+                                        [
+                                            {"Fn::GetAtt": ["S3IVSWebsite","Arn"]},
+                                            "/*"
+                                        ]
+                                    ]}
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [ 
+                                        "s3:ListBucket",
+                                        "s3:DeleteBucket"
+                                    ],
+                                        "Resource": {"Fn::GetAtt": ["S3IVSWebsite","Arn"]}
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": "arn:aws:logs:*:*:*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "UploaderLambda": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Description": "A Lambda Function which uploades files to S3 Website",
+                "FunctionName": "UploaderLambda",
+                "Handler": "index.handler",
+                "Role": {"Fn::GetAtt": ["UploaderLambdaRoleS3", "Arn"]},
+                "MemorySize": 128,
+                "Runtime": "python3.8",
+                "Code": {
+                    "ZipFile": {
+                        "Fn::Join": [
+                            "\n", [
+                                "import boto3",
+                                "import cfnresponse",
+                                "import botocore as boto",
+                                "import urllib.request",
+                                " ",
+                                "metadata = ['https://raw.githubusercontent.com/moosakhalid/amazon-ivs-proj/main/index.html,index.html','https://raw.githubusercontent.com/moosakhalid/amazon-ivs-proj/main/ivs.js,ivs.js']",
+                                " ",
+                                "s3_resource = boto3.resource('s3')",
+                                " ",
+                                "def handler(event, context):",
+                                "    the_event = event['RequestType']",
+                                "    bucket_name = event['ResourceProperties']['bucket_name']",
+                                "    playback_url = event['ResourceProperties']['ivs_playback_url']",
+                                "    if the_event in ('Create', 'Update'):",
+                                "        for value in metadata:",
+                                "            url, file_name = value.split(',')",
+                                "            with urllib.request.urlopen(url) as f:",
+                                "                contents = f.read().decode('utf-8')",
+                                "            if file_name == 'ivs.js':",
+                                "                contents = contents.replace('STREAM_PLAYBACK_URL', playback_url)",
+                                "            s3_object = s3_resource.Object(bucket_name, file_name)",
+                                "            s3_object.put(Body=contents, ContentType='text/html')",
+                                "        cfnresponse.send(event, context, cfnresponse.SUCCESS, {})",
+                                "    if the_event in ('Delete'):",
+                                "        s3_resource.Bucket(bucket_name).objects.all().delete()",
+                                "        s3_resource.Bucket(bucket_name).delete()",
+                                "        s3_resource.Bucket(bucket_name).wait_until_not_exists()",
+                                "        cfnresponse.send(event, context, cfnresponse.SUCCESS, {})"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "LambdaCustomUploader":{
+            "Type": "AWS::CloudFormation::CustomResource",
+            "Properties": {
+                "ServiceToken": {"Fn::GetAtt": ["UploaderLambda","Arn"]},
+                "bucket_name": {"Ref":"S3IVSWebsite"},
+                "ivs_playback_url": {"Fn::GetAtt": ["IVSChannel","PlaybackUrl"]}
+            }
+        }
+        },
+        "Outputs": {
+            "StreamKeyIVS": {
+                "Description": "The stream key for IVS channel",
+                "Value": {"Fn::GetAtt": ["IVSStreamKey","Value"]}
+            },
+            "IngestEndpointIVS": {
+                "Description": "RTMPS ingest endpoint, where you need to send your stream to",
+                "Value": {"Fn::GetAtt": ["IVSChannel","IngestEndpoint"]}
+            },
+            "IVSWebsiteURL":{
+                "Description": "URL for website hosting IVS Stream",
+                "Value": {"Fn::GetAtt": ["S3IVSWebsite","WebsiteURL"]}
+            }
+        }
+}
