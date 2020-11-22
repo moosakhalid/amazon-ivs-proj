@@ -19,7 +19,9 @@
         "IVSStreamKey": {
             "Type": "AWS::IVS::StreamKey",
             "Properties": {
-                "ChannelArn": {"Ref":"IVSChannel"},
+                "ChannelArn": {
+                    "Ref": "IVSChannel"
+                },
                 "Tags": [
                     {
                         "Key": "Name",
@@ -75,29 +77,51 @@
         "CustomIVSLambda": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
-                "FunctionName": "IVSLambda",
                 "Description": "IVS PutMetadata Lambda Function",
                 "Runtime": "python3.8",
                 "MemorySize": 128,
                 "Handler": "index.handler",
-                "Role": {"Fn::GetAtt": ["LambdaIVSRole","Arn"]},
+                "Role": {
+                    "Fn::GetAtt": [
+                        "LambdaIVSRole",
+                        "Arn"
+                    ]
+                },
+                "Timeout": 30,
                 "Code": {
                     "ZipFile": {
                         "Fn::Join": [
-                            "\n", [
+                            "\n",
+                            [
                                 "import boto3",
                                 "import botocore as boto",
+                                "import time",
                                 "client = boto3.client('ivs')",
                                 "metadata_string =  '{\"question\": \"This stream will be stopped shortly\", \"poll_id\": 0, \"answers\": [\"OK\", \"NOO\", \"Fine!!!\"]}'",
                                 "def handler(event, context):",
+                                "    print(event)",
+                                "    time.sleep(5)",
                                 "    if event['detail']['channel_name'] == 'MyIVSChannel-CloudFormation':",
                                 "        channel_list = event['resources']",
-                                "        time.sleep(15)",
+                                "        time.sleep(10)",
                                 "        client.put_metadata(channelArn=channel_list[0], metadata=metadata_string)"
                             ]
                         ]
                     }
                 }
+            }
+        },
+        "LambdaResourcePolicy": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "FunctionName": {
+                    "Fn::GetAtt": [
+                        "CustomIVSLambda",
+                        "Arn"
+                    ]
+                },
+                "Action": "lambda:InvokeFunction",
+                "Principal": "events.amazonaws.com"
             }
         },
         "IVSEventBridgeRule": {
@@ -115,8 +139,13 @@
                 "State": "ENABLED",
                 "Targets": [
                     {
-                        "Arn": {"Fn::GetAtt": ["CustomIVSLambda","Arn"]},
-                        "Id": "1234"
+                        "Arn": {
+                            "Fn::GetAtt": [
+                                "CustomIVSLambda",
+                                "Arn"
+                            ]
+                        },
+                        "Id": "IVSLambdaRule"
                     }
                 ]
             }
@@ -133,7 +162,9 @@
         "S3IVSBucketPolicy": {
             "Type": "AWS::S3::BucketPolicy",
             "Properties": {
-                "Bucket": {"Ref":"S3IVSWebsite"},
+                "Bucket": {
+                    "Ref": "S3IVSWebsite"
+                },
                 "PolicyDocument": {
                     "Version": "2012-10-17",
                     "Statement": [
@@ -142,14 +173,21 @@
                             "Action": [
                                 "s3:GetObject"
                             ],
-                            "Resource": {"Fn::Join": [
-                                "",[
-                                    {"Fn::GetAtt": ["S3IVSWebsite","Arn"]},
-                                    "/*"
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        {
+                                            "Fn::GetAtt": [
+                                                "S3IVSWebsite",
+                                                "Arn"
+                                            ]
+                                        },
+                                        "/*"
+                                    ]
                                 ]
-                            ]
-                        },
-                        "Principal": "*"
+                            },
+                            "Principal": "*"
                         }
                     ]
                 }
@@ -184,21 +222,33 @@
                                         "s3:Get*",
                                         "s3:DeleteObject"
                                     ],
-                                    "Resource": {"Fn::Join": [
-                                        "",
-                                        [
-                                            {"Fn::GetAtt": ["S3IVSWebsite","Arn"]},
-                                            "/*"
+                                    "Resource": {
+                                        "Fn::Join": [
+                                            "",
+                                            [
+                                                {
+                                                    "Fn::GetAtt": [
+                                                        "S3IVSWebsite",
+                                                        "Arn"
+                                                    ]
+                                                },
+                                                "/*"
+                                            ]
                                         ]
-                                    ]}
+                                    }
                                 },
                                 {
                                     "Effect": "Allow",
-                                    "Action": [ 
+                                    "Action": [
                                         "s3:ListBucket",
                                         "s3:DeleteBucket"
                                     ],
-                                        "Resource": {"Fn::GetAtt": ["S3IVSWebsite","Arn"]}
+                                    "Resource": {
+                                        "Fn::GetAtt": [
+                                            "S3IVSWebsite",
+                                            "Arn"
+                                        ]
+                                    }
                                 },
                                 {
                                     "Effect": "Allow",
@@ -221,13 +271,19 @@
                 "Description": "A Lambda Function which uploades files to S3 Website",
                 "FunctionName": "UploaderLambda",
                 "Handler": "index.handler",
-                "Role": {"Fn::GetAtt": ["UploaderLambdaRoleS3", "Arn"]},
+                "Role": {
+                    "Fn::GetAtt": [
+                        "UploaderLambdaRoleS3",
+                        "Arn"
+                    ]
+                },
                 "MemorySize": 128,
                 "Runtime": "python3.8",
                 "Code": {
                     "ZipFile": {
                         "Fn::Join": [
-                            "\n", [
+                            "\n",
+                            [
                                 "import boto3",
                                 "import cfnresponse",
                                 "import botocore as boto",
@@ -242,6 +298,7 @@
                                 "    bucket_name = event['ResourceProperties']['bucket_name']",
                                 "    playback_url = event['ResourceProperties']['ivs_playback_url']",
                                 "    if the_event in ('Create', 'Update'):",
+                                "        #upload files here",
                                 "        for value in metadata:",
                                 "            url, file_name = value.split(',')",
                                 "            with urllib.request.urlopen(url) as f:",
@@ -262,27 +319,63 @@
                 }
             }
         },
-        "LambdaCustomUploader":{
+        "LambdaCustomUploader": {
             "Type": "AWS::CloudFormation::CustomResource",
             "Properties": {
-                "ServiceToken": {"Fn::GetAtt": ["UploaderLambda","Arn"]},
-                "bucket_name": {"Ref":"S3IVSWebsite"},
-                "ivs_playback_url": {"Fn::GetAtt": ["IVSChannel","PlaybackUrl"]}
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        "UploaderLambda",
+                        "Arn"
+                    ]
+                },
+                "bucket_name": {
+                    "Ref": "S3IVSWebsite"
+                },
+                "ivs_playback_url": {
+                    "Fn::GetAtt": [
+                        "IVSChannel",
+                        "PlaybackUrl"
+                    ]
+                }
             }
         }
+    },
+    "Outputs": {
+        "StreamKeyIVS": {
+            "Description": "The stream key for IVS channel",
+            "Value": {
+                "Fn::GetAtt": [
+                    "IVSStreamKey",
+                    "Value"
+                ]
+            }
         },
-        "Outputs": {
-            "StreamKeyIVS": {
-                "Description": "The stream key for IVS channel",
-                "Value": {"Fn::GetAtt": ["IVSStreamKey","Value"]}
-            },
-            "IngestEndpointIVS": {
-                "Description": "RTMPS ingest endpoint, where you need to send your stream to",
-                "Value": {"Fn::GetAtt": ["IVSChannel","IngestEndpoint"]}
-            },
-            "IVSWebsiteURL":{
-                "Description": "URL for website hosting IVS Stream",
-                "Value": {"Fn::GetAtt": ["S3IVSWebsite","WebsiteURL"]}
+        "IngestEndpointIVS": {
+            "Description": "RTMPS ingest endpoint, where you need to send your stream to",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "rtmps://",
+                        {
+                            "Fn::GetAtt": [
+                                "IVSChannel",
+                                "Arn"
+                            ]
+                        },
+                        ":443/app/"
+                    ]
+                ]
+            }
+        },
+        "IVSWebsiteURL": {
+            "Description": "URL for website hosting IVS Stream",
+            "Value": {
+                "Fn::GetAtt": [
+                    "S3IVSWebsite",
+                    "WebsiteURL"
+                ]
             }
         }
+    }
 }
