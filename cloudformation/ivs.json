@@ -94,6 +94,7 @@
               "\n",
               [
                 "import boto3",
+                "import botocore as boto",
                 "import time",
                 "client = boto3.client('ivs')",
                 "metadata_string =  '{\"question\": \"Do you like this content?\", \"poll_id\": 0, \"answers\": [\"Yes\", \"No\", \"Not Sure\"]}'",
@@ -103,7 +104,10 @@
                 "    if event['detail']['channel_name'] == 'MyIVSChannel-CloudFormation':",
                 "        channel_list = event['resources']",
                 "        time.sleep(10)",
-                "        client.put_metadata(channelArn=channel_list[0], metadata=metadata_string)"
+                "        try:",
+                "            client.put_metadata(channelArn=channel_list[0], metadata=metadata_string)",
+                "        except Exception as e:",
+                "            print(e)"
               ]
             ]
           }
@@ -285,6 +289,7 @@
               [
                 "import boto3",
                 "import cfnresponse",
+                "import botocore as boto",
                 "import urllib.request",
                 " ",
                 "metadata = ['https://raw.githubusercontent.com/moosakhalid/amazon-ivs-proj/main/index.html,index.html','https://raw.githubusercontent.com/moosakhalid/amazon-ivs-proj/main/ivs.js,ivs.js']",
