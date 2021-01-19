@@ -24,6 +24,12 @@ a. It is assumed that user has appropriate AWS permissions or an AWS Admin user 
 b. For launching the template from AWS command line given that your IAM user has appropriate permissions, use the following command:
 
     aws cloudformation create-stack --stack-name "ivs-mk" --capabilities "CAPABILITY_NAMED_IAM" --template-body file://ivs.cf.json
+    
+Note:
+  Tob programatically get Cloudformation stack run output values use the following command, rename the template file to whatever template file
+  name you passed in.
+  
+    aws cloudformation describe-stacks --stack-name ivs-mk --query "Stacks[].Outputs[].[OutputKey,OutputValue]"
   
   Please note that you need to download the file ivs.cf.json from the cloudformation folder and execute the command above in the same
   directory where the file is placed or change the path passed to --template-body parameter accordingly.
