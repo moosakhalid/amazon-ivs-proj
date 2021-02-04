@@ -18,6 +18,7 @@ IVS PutMetadata API.
 
 
 Note:
+
 a. It is assumed that user has appropriate AWS permissions or an AWS Admin user for launching the template. 
    The template creates : Lambda function, EventBridge rules, IVS channel, IAM roles and policy, S3 bucket and S3 bucket policy.
 
@@ -26,7 +27,7 @@ b. For launching the template from AWS command line given that your IAM user has
     aws cloudformation create-stack --stack-name "ivs-mk" --capabilities "CAPABILITY_NAMED_IAM" --template-body file://ivs.cf.json
     
 Note:
-  Tob programatically get Cloudformation stack run output values use the following command, rename the template file to whatever template file
+  To programatically get Cloudformation stack run output values use the following command, rename the template file to whatever template file
   name you passed in.
   
     aws cloudformation describe-stacks --stack-name ivs-mk --query "Stacks[].Outputs[].[OutputKey,OutputValue]"
